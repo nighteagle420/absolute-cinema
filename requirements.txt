@@ -21,4 +21,3 @@ urllib3
 pymongo
 pycountry
 scipy
-google-images-search
