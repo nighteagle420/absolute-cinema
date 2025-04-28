@@ -19,7 +19,7 @@ def get_base64(path: Path) -> str:
     return base64.b64encode(path.read_bytes()).decode()
 
 # Load background image
-bg_path = BASE_DIR / 'archive' / 'c.jpeg'
+bg_path = BASE_DIR / 'archive' / 'img.jpg'
 bg_img = ''
 try:
     if bg_path.exists():
