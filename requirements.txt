@@ -22,3 +22,4 @@ pymongo
 pycountry
 scipy
 umap-learn==0.5.7
+kagglehub
