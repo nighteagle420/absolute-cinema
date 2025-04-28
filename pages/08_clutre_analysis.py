@@ -30,12 +30,8 @@ for d in (DATA_DIR, CACHE_DIR):
 # ──────────────────────────────────────────────────────────────────────────────
 @st.cache_resource(show_spinner=False)
 def fetch_kaggle_csvs() -> None:
-    """
-    Download the Letterboxd CSVs once and save into data/.
-    """
     files = ["movies.csv", "genres.csv", "themes.csv", "releases.csv", "countries.csv"]
     for fname in files:
-        # if file already exists, skip
         out = DATA_DIR / fname
         if out.exists():
             continue
@@ -46,7 +42,6 @@ def fetch_kaggle_csvs() -> None:
         )
         df.to_csv(out, index=False)
 
-# Trigger download on first run only
 fetch_kaggle_csvs()
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -75,6 +70,38 @@ def load_data() -> dict[str, pd.DataFrame]:
 
 data = load_data()
 
+@st.cache_resource(show_spinner=False)
+def build_sparse_features() -> tuple[sparse.csr_matrix, list[int]]:
+    h = hashlib.md5()
+    for f in sorted(DATA_DIR.glob("*.csv")):
+        h.update(f.name.encode())
+        h.update(str(f.stat().st_mtime).encode())
+    sig = h.hexdigest()
+
+    cache_path = CACHE_DIR / "sparse.joblib"
+    if cache_path.exists():
+        try:
+            X, mids, saved = joblib.load(cache_path)
+            if saved == sig:
+                return X, mids
+        except Exception:
+            pass
+
+    mids = data["movies"]["movie_id"].tolist()
+    def collect(df: pd.DataFrame, col: str) -> list[list[str]]:
+        grp = df.groupby("movie_id")[col].apply(list)
+        return [grp.get(mid, []) for mid in mids]
+
+    mlb_g = MultiLabelBinarizer(sparse_output=True)
+    mlb_t = MultiLabelBinarizer(sparse_output=True)
+    Xg = mlb_g.fit_transform(collect(data["genres"], "genre"))
+    Xt = mlb_t.fit_transform(collect(data["themes"], "theme"))
+    X = sparse.hstack([Xg, Xt]).tocsr()
+    joblib.dump((X, mids, sig), cache_path, compress=3)
+    return X, mids
+
+# Precompute once
+SPARSE_X, ORDERED_MIDS = build_sparse_features()
 # ──────────────────────────────────────────────────────────────────────────────
 # 2 · Sidebar: Filters & HCI
 # ──────────────────────────────────────────────────────────────────────────────
@@ -220,26 +247,51 @@ def social_scatter(df_fil):
     with c1: st.plotly_chart(fig,use_container_width=True,config={"scrollZoom":True,"modeBarButtonsToAdd":["lasso2d","select2d"],"displaylogo":False})
     with c2: render_insights(df_fil); st.markdown("**Top plot-keywords:** " + ", ".join(f"\"{w}\"" for w,_ in _top_terms(df_fil['description'].dropna().astype(str).tolist(),5)))
 
-def cultural_embed(df):
-    if df.empty: st.info("No data."); return
+def cultural_embed(df: pd.DataFrame):
+    if df.empty:
+        st.info("No data.")
+        return
     render_metrics(df)
-    # lazy build sparse
-    X, ORDERED_MIDS = build_sparse_features()
+
+    # Use precomputed globals SPARSE_X and ORDERED_MIDS
     mids = random.sample(df.movie_id.tolist(), min(len(df), sample_size))
     idx = [ORDERED_MIDS.index(m) for m in mids]
-    Xs = X[idx]
-    if Xs.shape[0]>6000: coords=UMAP(n_components=2,random_state=42).fit_transform(Xs); method="UMAP"
-    else: coords=TSNE(n_components=2,perplexity=30,random_state=42).fit_transform(Xs.toarray()); method="t-SNE"
-    clusters=DBSCAN(eps=0.5,min_samples=5).fit_predict(coords)
-    emb=pd.DataFrame(coords,columns=['x','y']); emb['cluster']=clusters.astype(str); emb['movie_id']=mids
-    emb=emb.merge(df.set_index('movie_id')[['title','release_year','description']],left_on='movie_id',right_index=True)
-    sizes=df['movie_id'].map(data['releases'].groupby('movie_id').size()).fillna(1); emb['size']=np.log1p(sizes)*marker_size
-    emb['genre']=emb['movie_id'].map(data['genres'].groupby('movie_id')['genre'].first()); emb['desc_snip']=emb['description'].fillna('').str[:100]+'...'
-    fig=px.scatter(emb,x='x',y='y',color='genre',symbol='cluster',size='size',hover_data={'title':True,'release_year':True,'cluster':True,'desc_snip':True,'x':False,'y':False,'size':False},title=f"{method} Cultural Clusters by Genre",template='plotly_dark')
-    fig.update_layout(height=700,legend=dict(itemsizing='constant'))
-    c1,c2=st.columns([3,1]);
-    with c1: st.plotly_chart(fig,use_container_width=True,config={"scrollZoom":True,"modeBarButtonsToAdd":["lasso2d","select2d"],"displaylogo":False})
-    with c2: render_insights(df)
+    Xs = SPARSE_X[idx]
+
+    if Xs.shape[0] > 6000:
+        coords = UMAP(n_components=2, random_state=42).fit_transform(Xs)
+        method = "UMAP"
+    else:
+        coords = TSNE(n_components=2, perplexity=30, random_state=42).fit_transform(Xs.toarray())
+        method = "t-SNE"
+
+    clusters = DBSCAN(eps=0.5, min_samples=5).fit_predict(coords)
+
+    emb_df = pd.DataFrame(coords, columns=["x","y"])
+    emb_df["cluster"]  = clusters.astype(str)
+    emb_df["movie_id"] = mids
+    emb_df = emb_df.merge(
+        df.set_index("movie_id")[['title','release_year','description']],
+        left_on="movie_id", right_index=True
+    )
+
+    cnt_map = data['releases'].groupby('movie_id').size().to_dict()
+    emb_df['size'] = emb_df['movie_id'].map(lambda m: np.log1p(cnt_map.get(m,1)) * marker_size)
+    emb_df['genre']     = emb_df['movie_id'].map(data['genres'].groupby('movie_id')['genre'].first())
+    emb_df['desc_snip'] = emb_df['description'].fillna('').str.slice(0,100) + '...'
+
+    fig = px.scatter(
+        emb_df, x='x', y='y', color='genre', symbol='cluster', size='size',
+        hover_data={'title':True,'release_year':True,'cluster':True,'desc_snip':True,'x':False,'y':False,'size':False},
+        title=f"{method} Cultural Clusters by Genre", template='plotly_dark'
+    )
+    fig.update_layout(height=700, legend=dict(itemsizing='constant'))
+
+    c1, c2 = st.columns([3,1])
+    with c1:
+        st.plotly_chart(fig, use_container_width=True, config={"scrollZoom":True,"modeBarButtonsToAdd":["lasso2d","select2d"],"displaylogo":False})
+    with c2:
+        render_insights(df)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 6 · Main render
