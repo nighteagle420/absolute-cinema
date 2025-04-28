@@ -19,10 +19,10 @@ st.write("")  # Small space
 # --- Load Data ---
 @st.cache_data
 def load_data():
-    movies = pd.read_csv(r"C:\Users\Asus\OneDrive\Desktop\big data project\movies2.csv")
-    studios = pd.read_csv(r"C:\Users\Asus\OneDrive\Desktop\big data project\studio3.csv")
-    revenues = pd.read_csv(r"C:\Users\Asus\OneDrive\Desktop\big data project\revenuebudget.csv")
-    releases = pd.read_csv(r"C:\Users\Asus\OneDrive\Desktop\big data project\releases.csv")
+    movies = pd.read_csv(r"archive/movies2.csv")
+    studios = pd.read_csv(r"archive/studio3.csv")
+    revenues = pd.read_csv(r"archive/revenuebudget.csv")
+    releases = pd.read_csv(r"archive/releases.csv")
 
     releases['release_date'] = pd.to_datetime(releases['release_date'], errors='coerce')
 
