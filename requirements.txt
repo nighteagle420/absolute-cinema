@@ -21,5 +21,4 @@ urllib3
 pymongo
 pycountry
 scipy
-umap-learn
 google-images-search
