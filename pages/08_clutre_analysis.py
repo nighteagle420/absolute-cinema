@@ -2,9 +2,6 @@ from __future__ import annotations
 import kagglehub
 from kagglehub import KaggleDatasetAdapter
 from pathlib import Path
-import zipfile
-
-# Streamlit & data science imports
 import random
 import hashlib
 import joblib
@@ -29,34 +26,42 @@ for d in (DATA_DIR, CACHE_DIR):
     d.mkdir(exist_ok=True)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 0 · Download Kaggle CSVs into data/
+# 0 · Kaggle Downloads (cached)
 # ──────────────────────────────────────────────────────────────────────────────
-files = ["movies.csv", "genres.csv", "themes.csv", "releases.csv", "countries.csv"]
-for fname in files:
-    df = kagglehub.dataset_load(
-        KaggleDatasetAdapter.PANDAS,
-        "gsimonx37/letterboxd",
-        fname
-    )
-    df.to_csv(DATA_DIR / fname, index=False)
+@st.cache_resource(show_spinner=False)
+def fetch_kaggle_csvs() -> None:
+    """
+    Download the Letterboxd CSVs once and save into data/.
+    Cached so it won't block startup on subsequent runs.
+    """
+    files = ["movies.csv", "genres.csv", "themes.csv", "releases.csv", "countries.csv"]
+    for fname in files:
+        df = kagglehub.dataset_load(
+            KaggleDatasetAdapter.PANDAS,
+            "gsimonx37/letterboxd",
+            fname
+        )
+        df.to_csv(DATA_DIR / fname, index=False)
+
+# Trigger fetch (first run only)
+fetch_kaggle_csvs()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 1 · Load & Cache Data
 # ──────────────────────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
-def read_csv(name: str) -> pd.DataFrame:
-    path = DATA_DIR / name
-    if not path.exists():
-        st.error(f"Missing file: {path}")
-        st.stop()
-    df = pd.read_csv(path)
-    df.columns = df.columns.str.strip()
-    if "id" in df.columns and "movie_id" not in df.columns:
-        df = df.rename(columns={"id": "movie_id"})
-    return df
-
-@st.cache_data(show_spinner=False)
 def load_data() -> dict[str, pd.DataFrame]:
+    def read_csv(name: str) -> pd.DataFrame:
+        path = DATA_DIR / name
+        if not path.exists():
+            st.error(f"Missing file: {path}")
+            st.stop()
+        df = pd.read_csv(path)
+        df.columns = df.columns.str.strip()
+        if "id" in df.columns and "movie_id" not in df.columns:
+            df = df.rename(columns={"id": "movie_id"})
+        return df
+
     files = ["countries.csv", "genres.csv", "themes.csv", "releases.csv", "movies.csv"]
     data = {f.split('.')[0]: read_csv(f) for f in files}
     data["movies"]   = data["movies"].rename(columns={"name": "title", "date": "year"})
@@ -69,6 +74,7 @@ data = load_data()
 
 @st.cache_resource(show_spinner=False)
 def build_sparse_features() -> tuple[sparse.csr_matrix, list[int]]:
+    # detect CSV changes
     h = hashlib.md5()
     for f in sorted(DATA_DIR.glob("*.csv")):
         h.update(f.name.encode())
@@ -89,17 +95,16 @@ def build_sparse_features() -> tuple[sparse.csr_matrix, list[int]]:
         grp = df.groupby("movie_id")[col].apply(list)
         return [grp.get(mid, []) for mid in mids]
 
-    mlb_genres = MultiLabelBinarizer(sparse_output=True)
-    mlb_themes = MultiLabelBinarizer(sparse_output=True)
-
-    Xg = mlb_genres.fit_transform(collect(data["genres"], "genre"))
-    Xt = mlb_themes.fit_transform(collect(data["themes"], "theme"))
-
+    mlb_g = MultiLabelBinarizer(sparse_output=True)
+    mlb_t = MultiLabelBinarizer(sparse_output=True)
+    Xg = mlb_g.fit_transform(collect(data["genres"], "genre"))
+    Xt = mlb_t.fit_transform(collect(data["themes"], "theme"))
     X = sparse.hstack([Xg, Xt]).tocsr()
     joblib.dump((X, mids, sig), cache_path, compress=3)
     return X, mids
 
 SPARSE_X, ORDERED_MIDS = build_sparse_features()
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 2 · Sidebar: Filters & HCI
 # ──────────────────────────────────────────────────────────────────────────────
