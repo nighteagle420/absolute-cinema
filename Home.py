@@ -20,11 +20,12 @@ def get_base64(path: Path) -> str:
 
 # Load background image
 bg_path = BASE_DIR / 'archive' / 'c.jpeg'
-if not bg_path.exists():
-    bg_img = ''
-    st.warning(f"Background not found at {bg_path}.")
-else:
-    bg_img = get_base64(bg_path)
+bg_img = ''
+try:
+    if bg_path.exists():
+        bg_img = get_base64(bg_path)
+except Exception as e:
+    st.warning(f"Background load failed: {e}")
 
 # Inject CSS
 css = f"""
