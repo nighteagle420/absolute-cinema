@@ -1,11 +1,13 @@
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Now your other imports
 from __future__ import annotations
+import kagglehub
+from kagglehub import KaggleDatasetAdapter
+from pathlib import Path
+import zipfile
+
+# Streamlit & data science imports
 import random
 import hashlib
 import joblib
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -17,33 +19,26 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from umap import UMAP
 from sklearn.manifold import TSNE
 from sklearn.cluster import DBSCAN
-#───────────────────────────────────────────────────────────────────────────
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 0 · Config & Theme
+# Config & Paths
 # ──────────────────────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="🎬 Film Cultural Impact Explorer",
-    layout="wide"
-)
-DATA_DIR = Path("archive")
+DATA_DIR = Path("data")
 CACHE_DIR = Path(".cache")
-CACHE_DIR.mkdir(exist_ok=True)
+for d in (DATA_DIR, CACHE_DIR):
+    d.mkdir(exist_ok=True)
 
-DEC_META: dict[str, tuple[int, int, list[tuple[str, str]]]] = {
-    "1920–1929 – Silent Era":    (1920, 1929, [("German Expressionism", "https://en.wikipedia.org/wiki/German_Expressionism"),
-                                                ("Rise of Hollywood",     "https://en.wikipedia.org/wiki/History_of_Hollywood")]),
-    "1930–1949 – Golden Age":     (1930, 1949, [("Golden Age of Hollywood", "https://en.wikipedia.org/wiki/Golden_Age_of_Hollywood"),
-                                                ("Pre-/Post-war cinema",    "https://en.wikipedia.org/wiki/History_of_film")]),
-    "1950–1969 – New Waves":      (1950, 1969, [("French New Wave",       "https://en.wikipedia.org/wiki/French_New_Wave"),
-                                                ("Japanese New Wave",     "https://en.wikipedia.org/wiki/Japanese_New_Wave")]),
-    "1970–1989 – Blockbusters":   (1970, 1989, [("New Hollywood",         "https://en.wikipedia.org/wiki/New_Hollywood"),
-                                                ("Blockbuster era",       "https://en.wikipedia.org/wiki/Blockbuster_(entertainment)")]),
-    "1990–2009 – Global Boom":    (1990, 2009, [("Nollywood",             "https://en.wikipedia.org/wiki/Cinema_of_Nigeria"),
-                                                ("Asian cinema boom",     "https://en.wikipedia.org/wiki/Cinema_of_South_Korea")]),
-    "2010–2025 – Streaming Era":  (2010, 2025, [("Streaming revolution",  "https://en.wikipedia.org/wiki/Streaming_media"),
-                                                ("Hallyu wave",           "https://en.wikipedia.org/wiki/Hallyu")]),
-}
+# ──────────────────────────────────────────────────────────────────────────────
+# 0 · Download Kaggle CSVs into data/
+# ──────────────────────────────────────────────────────────────────────────────
+files = ["movies.csv", "genres.csv", "themes.csv", "releases.csv", "countries.csv"]
+for fname in files:
+    df = kagglehub.dataset_load(
+        KaggleDatasetAdapter.PANDAS,
+        "gsimonx37/letterboxd",
+        fname
+    )
+    df.to_csv(DATA_DIR / fname, index=False)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 1 · Load & Cache Data
@@ -74,7 +69,6 @@ data = load_data()
 
 @st.cache_resource(show_spinner=False)
 def build_sparse_features() -> tuple[sparse.csr_matrix, list[int]]:
-    # create a hash signature to detect CSV changes
     h = hashlib.md5()
     for f in sorted(DATA_DIR.glob("*.csv")):
         h.update(f.name.encode())
@@ -90,7 +84,6 @@ def build_sparse_features() -> tuple[sparse.csr_matrix, list[int]]:
         except Exception:
             pass
 
-    # build features
     mids = data["movies"]["movie_id"].tolist()
     def collect(df: pd.DataFrame, col: str) -> list[list[str]]:
         grp = df.groupby("movie_id")[col].apply(list)
@@ -107,10 +100,28 @@ def build_sparse_features() -> tuple[sparse.csr_matrix, list[int]]:
     return X, mids
 
 SPARSE_X, ORDERED_MIDS = build_sparse_features()
-
 # ──────────────────────────────────────────────────────────────────────────────
 # 2 · Sidebar: Filters & HCI
 # ──────────────────────────────────────────────────────────────────────────────
+DEC_META: dict[str, tuple[int, int, list[tuple[str, str]]]] = {
+    "1920–1929 – Silent Era":    (1920, 1929, [("German Expressionism", "https://en.wikipedia.org/wiki/German_Expressionism"),
+                                                ("Rise of Hollywood",     "https://en.wikipedia.org/wiki/History_of_Hollywood")]),
+    "1930–1949 – Golden Age":     (1930, 1949, [("Golden Age of Hollywood", "https://en.wikipedia.org/wiki/Golden_Age_of_Hollywood"),
+                                                ("Pre-/Post-war cinema",    "https://en.wikipedia.org/wiki/History_of_film")]),
+    "1950–1969 – New Waves":      (1950, 1969, [("French New Wave",       "https://en.wikipedia.org/wiki/French_New_Wave"),
+                                                ("Japanese New Wave",     "https://en.wikipedia.org/wiki/Japanese_New_Wave")]),
+    "1970–1989 – Blockbusters":   (1970, 1989, [("New Hollywood",         "https://en.wikipedia.org/wiki/New_Hollywood"),
+                                                ("Blockbuster era",       "https://en.wikipedia.org/wiki/Blockbuster_(entertainment)")]),
+    "1990–2009 – Global Boom":    (1990, 2009, [("Nollywood",             "https://en.wikipedia.org/wiki/Cinema_of_Nigeria"),
+                                                ("Asian cinema boom",     "https://en.wikipedia.org/wiki/Cinema_of_South_Korea")]),
+    "2010–2025 – Streaming Era":  (2010, 2025, [("Streaming revolution",  "https://en.wikipedia.org/wiki/Streaming_media"),
+                                                ("Hallyu wave",           "https://en.wikipedia.org/wiki/Hallyu")]),
+}
+
+st.set_page_config(
+    page_title="🎬 Film Cultural Impact Explorer",
+    layout="wide"
+)
 with st.sidebar:
     st.title("🎥 Film Impact Explorer")
     view = st.radio("🔍 Select View", ["Geo Map","Social Scatter","Cultural Embed","Historical"])
@@ -161,8 +172,8 @@ def filter_by(df_subset: pd.DataFrame, key: str, selected: list[str], target: pd
     return target[target["movie_id"].isin(valid_ids)]
 
 def filter_movies(year_range, genres_sel, themes_sel, countries_sel, search_query) -> pd.DataFrame:
-    rel = data["releases"][["movie_id","country_release","release_year"]]
-    mv  = data["movies"][["movie_id","title","description"]].merge(rel,
+    rel = data["releases"][['movie_id','country_release','release_year']]
+    mv  = data["movies"][['movie_id','title','description']].merge(rel,
                                                                    on="movie_id",
                                                                    how="left")
     mv  = mv[mv["release_year"].between(*year_range)]
@@ -189,6 +200,7 @@ st.download_button("⬇️ Download Filtered Data",
 # ──────────────────────────────────────────────────────────────────────────────
 # 4 · Helpers & Insights
 # ──────────────────────────────────────────────────────────────────────────────
+
 tfidf = TfidfVectorizer(stop_words="english", max_features=2000, ngram_range=(1,2))
 
 def _top_terms(descs: list[str], n_terms: int=5) -> list[tuple[str,int]]:
@@ -273,6 +285,7 @@ def geo_map(df: pd.DataFrame):
         topd = _top_terms(descs, 5)
         st.markdown("**Top plot-keywords:** " + ", ".join(f"\"{w}\"" for w,_ in topd))
 
+
 def social_scatter(df_fil: pd.DataFrame):
     if df_fil.empty:
         st.info("No data for selection.")
@@ -322,6 +335,7 @@ def social_scatter(df_fil: pd.DataFrame):
         st.markdown("**Top plot-keywords:** " + ", ".join(f"\"{w}\"" for w,_ in topd))
         render_insights(df_fil)
 
+
 def cultural_embed(df: pd.DataFrame):
     if df.empty:
         st.info("No data.")
@@ -342,67 +356,3 @@ def cultural_embed(df: pd.DataFrame):
     clusters = DBSCAN(eps=0.5, min_samples=5).fit_predict(coords)
 
     emb_df = pd.DataFrame(coords, columns=["x","y"])
-    emb_df["cluster"]      = clusters.astype(str)
-    emb_df["movie_id"]     = mids
-    emb_df = emb_df.merge(
-        df.set_index("movie_id")[['title','release_year','description']],
-        left_on="movie_id",
-        right_index=True
-    )
-
-    rel     = data['releases'][data['releases'].movie_id.isin(mids)]
-    cnt_map = rel.groupby('movie_id').size().to_dict()
-    emb_df['size'] = emb_df['movie_id'].map(lambda m: np.log1p(cnt_map.get(m,1)) * marker_size)
-
-    genres      = (data['genres']
-                   .loc[data['genres'].movie_id.isin(mids)]
-                   .groupby('movie_id')['genre']
-                   .first()
-                   .to_dict())
-    emb_df['genre']     = emb_df['movie_id'].map(genres)
-    emb_df['desc_snip'] = emb_df['description'].fillna('').str.slice(0,100) + '...'
-
-    fig = px.scatter(
-        emb_df,
-        x='x',
-        y='y',
-        color='genre',
-        symbol='cluster',
-        size='size',
-        hover_data={
-            'title':True,
-            'release_year':True,
-            'cluster':True,
-            'desc_snip':True,
-            'x':False,
-            'y':False,
-            'size':False
-        },
-        title=f"{method} Cultural Clusters by Genre",
-        labels={'x':'Component 1','y':'Component 2'},
-        template='plotly_dark'
-    )
-    fig.update_layout(height=700, legend=dict(itemsizing='constant'))
-
-    c1, c2 = st.columns([3,1])
-    with c1:
-        st.plotly_chart(fig,
-                        use_container_width=True,
-                        config={"scrollZoom":True,
-                                "modeBarButtonsToAdd":["lasso2d","select2d"],
-                                "displaylogo":False})
-    with c2:
-        render_insights(df)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 6 · Main render
-# ──────────────────────────────────────────────────────────────────────────────
-st.title("🎬 Film Cultural Impact Explorer – v1.5")
-if   view == "Geo Map":        geo_map(df)
-elif view == "Social Scatter": social_scatter(df)
-elif view == "Cultural Embed": cultural_embed(df)
-else:
-    tabs = st.tabs(["Geo","Social","Embed"])
-    with tabs[0]: geo_map(df)
-    with tabs[1]: social_scatter(df)
-    with tabs[2]: cultural_embed(df)
