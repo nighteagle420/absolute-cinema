@@ -1,7 +1,4 @@
 from __future__ import annotations
-import kagglehub
-from kagglehub import KaggleDatasetAdapter
-from pathlib import Path
 import random
 import hashlib
 import joblib
@@ -18,90 +15,200 @@ from sklearn.manifold import TSNE
 from sklearn.cluster import DBSCAN
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Config & Paths
+# 0 · Google Drive Streaming Loader (no local writes)
 # ──────────────────────────────────────────────────────────────────────────────
-DATA_DIR = Path("data")
-CACHE_DIR = Path(".cache")
-for d in (DATA_DIR, CACHE_DIR):
-    d.mkdir(exist_ok=True)
+# If you have full shareable Drive URLs, list them here:
+GDRIVE_LINKS = {
+    "movies.csv":    "https://drive.google.com/file/d/1-AxbDiUcLN8KGFb3gIXrSfyyHdPWV_iN/view?usp=sharing",
+    "genres.csv":    "https://drive.google.com/file/d/10bKEjkyWOquTpCJZIwz2EE3AAW5HbEjm/view?usp=sharing",
+    "themes.csv":    "https://drive.google.com/file/d/1KvIdV7lEhBXiPgmINYeGEwAC6mPnl41V/view?usp=sharing",
+    "releases.csv":  "https://drive.google.com/file/d/1d5GnDcCfX04vgmPavf0vjP2uf4nliJzf/view?usp=sharing",
+    "countries.csv": "https://drive.google.com/file/d/1oWCucWLLKlA9EShNoh2dVb6Tgyf4ohm7/view?usp=sharing",
+}
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 0 · Kaggle Downloads (cached)
-# ──────────────────────────────────────────────────────────────────────────────
-@st.cache_resource(show_spinner=False)
-def fetch_kaggle_csvs() -> None:
-    files = ["movies.csv", "genres.csv", "themes.csv", "releases.csv", "countries.csv"]
-    for fname in files:
-        out = DATA_DIR / fname
-        if out.exists():
-            continue
-        df = kagglehub.dataset_load(
-            KaggleDatasetAdapter.PANDAS,
-            "gsimonx37/letterboxd",
-            fname
-        )
-        df.to_csv(out, index=False)
+def read_gdrive_csv_from_link(share_link: str) -> pd.DataFrame:
+    """
+    Convert a Google Drive shareable link into a direct-download URL
+    and stream it into pandas without writing to disk.
+    """
+    # extract the file ID from the shareable URL
+    # e.g. https://drive.google.com/file/d/FILE_ID/view?usp=sharing
+    file_id = share_link.split('/d/')[1].split('/')[0]
+    url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    return pd.read_csv(url)
 
-fetch_kaggle_csvs()
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 1 · Load & Cache Data
-# ──────────────────────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
 def load_data() -> dict[str, pd.DataFrame]:
-    def read_csv(name: str) -> pd.DataFrame:
-        path = DATA_DIR / name
-        if not path.exists():
-            st.error(f"Missing file: {path}")
-            st.stop()
-        df = pd.read_csv(path)
-        df.columns = df.columns.str.strip()
-        if "id" in df.columns and "movie_id" not in df.columns:
-            df = df.rename(columns={"id": "movie_id"})
-        return df
+    """
+    Stream all CSVs directly from Google Drive into memory and preprocess.
+    """
+    data: dict[str, pd.DataFrame] = {}
+    # load each CSV by streaming from Drive
+    for fname, link in GDRIVE_LINKS.items():
+        df = read_gdrive_csv_from_link(link)
+        key = fname.replace('.csv', '')
+        # rename id->movie_id if needed
+        if 'id' in df.columns and 'movie_id' not in df.columns:
+            df = df.rename(columns={'id':'movie_id'})
+        data[key] = df
 
-    files = ["countries.csv", "genres.csv", "themes.csv", "releases.csv", "movies.csv"]
-    data = {f.split('.')[0]: read_csv(f) for f in files}
-    data["movies"]   = data["movies"].rename(columns={"name": "title", "date": "year"})
-    data["releases"] = data["releases"].rename(columns={"country": "country_release"})
-    data["releases"]["release_date"] = pd.to_datetime(data["releases"]["date"], errors="coerce")
-    data["releases"]["release_year"] = data["releases"]["release_date"].dt.year
+    # standard pipeline renames
+    data['movies']   = data['movies'].rename(columns={'name':'title','date':'year'})
+    data['releases'] = (
+        data['releases']
+        .rename(columns={'country':'country_release'})
+        .assign(
+            release_date=lambda d: pd.to_datetime(d['date'], errors='coerce'),
+            release_year=lambda d: pd.to_datetime(d['date'], errors='coerce').dt.year
+        )
+    )
     return data
 
+# load all tables in-memory without any disk writes
+data = load_data()
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Replace each <FILE_ID> with your actual Google Drive file ID for the CSV
+GDRIVE_IDS = {
+    "movies.csv":    "1-AxbDiUcLN8KGFb3gIXrSfyyHdPWV_iN",
+    "genres.csv":    "10bKEjkyWOquTpCJZIwz2EE3AAW5HbEjm",
+    "themes.csv":    "1KvIdV7lEhBXiPgmINYeGEwAC6mPnl41V",
+    "releases.csv":  "1d5GnDcCfX04vgmPavf0vjP2uf4nliJzf",
+    "countries.csv": "1oWCucWLLKlA9EShNoh2dVb6Tgyf4ohm7",
+}
+
+def read_gdrive_csv(fname: str) -> pd.DataFrame:
+    """
+    Stream a CSV directly from Google Drive into pandas without writing to disk.
+    """
+    fid = GDRIVE_IDS[fname]
+    # direct-download URL for Google Drive
+    url = f"https://drive.google.com/uc?export=download&id={fid}"
+    return pd.read_csv(url)
+
+@st.cache_data(show_spinner=False)
+def load_data() -> dict[str, pd.DataFrame]:
+    # load each CSV into memory
+    data: dict[str, pd.DataFrame] = {}
+    for fname in GDRIVE_IDS:
+        df = read_gdrive_csv(fname)
+        key = fname.replace('.csv','')
+        # rename id->movie_id if present
+        if 'id' in df.columns and 'movie_id' not in df.columns:
+            df = df.rename(columns={'id':'movie_id'})
+        data[key] = df
+
+    # post-process to mirror original pipeline
+    # movies: rename name->title, date->year
+    data['movies'] = data['movies'].rename(columns={'name':'title','date':'year'})
+    # releases: rename country->country_release, parse dates
+    rel = data['releases'].rename(columns={'country':'country_release'})
+    rel['release_date'] = pd.to_datetime(rel['date'], errors='coerce')
+    rel['release_year'] = rel['release_date'].dt.year
+    data['releases'] = rel
+
+    return data
+
+# load all tables in-memory
 data = load_data()
 
 @st.cache_resource(show_spinner=False)
 def build_sparse_features() -> tuple[sparse.csr_matrix, list[int]]:
+    # generate hash signature to detect data changes
     h = hashlib.md5()
-    for f in sorted(DATA_DIR.glob("*.csv")):
-        h.update(f.name.encode())
-        h.update(str(f.stat().st_mtime).encode())
+    # include each table's contents in signature
+    for key, df in data.items():
+        h.update(key.encode())
+        h.update(pd.util.hash_pandas_object(df, index=True).values)
     sig = h.hexdigest()
 
-    cache_path = CACHE_DIR / "sparse.joblib"
-    if cache_path.exists():
-        try:
-            X, mids, saved = joblib.load(cache_path)
-            if saved == sig:
-                return X, mids
-        except Exception:
-            pass
+    # use in-memory caching
+    cache = {}  # simple dict cache
+    if cache.get('sig') == sig:
+        return cache['X'], cache['mids']
 
-    mids = data["movies"]["movie_id"].tolist()
+    # build features
+    mids = data['movies']['movie_id'].tolist()
     def collect(df: pd.DataFrame, col: str) -> list[list[str]]:
-        grp = df.groupby("movie_id")[col].apply(list)
+        grp = df.groupby('movie_id')[col].apply(list)
         return [grp.get(mid, []) for mid in mids]
 
     mlb_g = MultiLabelBinarizer(sparse_output=True)
     mlb_t = MultiLabelBinarizer(sparse_output=True)
-    Xg = mlb_g.fit_transform(collect(data["genres"], "genre"))
-    Xt = mlb_t.fit_transform(collect(data["themes"], "theme"))
+    Xg = mlb_g.fit_transform(collect(data['genres'], 'genre'))
+    Xt = mlb_t.fit_transform(collect(data['themes'], 'theme'))
     X = sparse.hstack([Xg, Xt]).tocsr()
-    joblib.dump((X, mids, sig), cache_path, compress=3)
+
+    # update cache
+    cache['X'], cache['mids'], cache['sig'] = X, mids, sig
     return X, mids
 
-# Precompute once
+# precompute embedding features
 SPARSE_X, ORDERED_MIDS = build_sparse_features()
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 1 · Streamlit UI: Sidebar, Filters & Config
+# ──────────────────────────────────────────────────────────────────────────────
+DEC_META: dict[str, tuple[int, int, list[tuple[str, str]]]] = {
+    '1920–1929 – Silent Era':  (1920, 1929, [('German Expressionism','https://en.wikipedia.org/wiki/German_Expressionism'),('Rise of Hollywood','https://en.wikipedia.org/wiki/History_of_Hollywood')]),
+    '1930–1949 – Golden Age':   (1930, 1949, [('Golden Age of Hollywood','https://en.wikipedia.org/wiki/Golden_Age_of_Hollywood'),('Pre-/Post-war cinema','https://en.wikipedia.org/wiki/History_of_film')]),
+    '1950–1969 – New Waves':    (1950, 1969, [('French New Wave','https://en.wikipedia.org/wiki/French_New_Wave'),('Japanese New Wave','https://en.wikipedia.org/wiki/Japanese_New_Wave')]),
+    '1970–1989 – Blockbusters': (1970, 1989, [('New Hollywood','https://en.wikipedia.org/wiki/New_Hollywood'),('Blockbuster era','https://en.wikipedia.org/wiki/Blockbuster_(entertainment)')]),
+    '1990–2009 – Global Boom':  (1990, 2009, [('Nollywood','https://en.wikipedia.org/wiki/Cinema_of_Nigeria'),('Asian cinema boom','https://en.wikipedia.org/wiki/Cinema_of_South_Korea')]),
+    '2010–2025 – Streaming Era':(2010,2025,[('Streaming revolution','https://en.wikipedia.org/wiki/Streaming_media'),('Hallyu wave','https://en.wikipedia.org/wiki/Hallyu')]),
+}
+
+st.set_page_config(page_title='🎬 Film Cultural Impact Explorer', layout='wide')
+with st.sidebar:
+    st.title('🎥 Film Impact Explorer')
+    view = st.radio('🔍 Select View',['Geo Map','Social Scatter','Cultural Embed','Historical'])
+    search_query = st.text_input('🖊️ Search Titles/Descriptions')
+    if view=='Historical':
+        decade = st.selectbox('📆 Decade', list(DEC_META.keys()))
+        yr_min,yr_max,cites = DEC_META[decade]
+        st.markdown(f'**Years:** {yr_min} – {yr_max}')
+        year_range=(yr_min,yr_max)
+    else:
+        yrs = data['releases']['release_year'].dropna()
+        year_range=st.slider('📅 Release Year Range',int(yrs.min()),int(yrs.max()),(int(yrs.min()),int(yrs.max())))
+    with st.expander('📦 Metadata Filters'):
+        genres_sel  = st.multiselect('🎭 Genres',['All']+sorted(data['genres']['genre'].unique()),['All'])
+        themes_sel  = st.multiselect('🏷️ Themes',['All']+sorted(data['themes']['theme'].unique()),['All'])
+        countries_sel=st.multiselect('🌍 Production Countries',['All']+sorted(data['countries']['country'].unique()),['All'])
+    if view in ('Cultural Embed','Historical'):
+        with st.expander('🧮 Embedding Settings'):
+            sample_size=st.slider('📏 Sample Size',900,100000,4000,step=500)
+            marker_size=st.slider('🖋️ Marker Size',3,20,7)
+    cmap=st.selectbox('🌈 Color Palette',['Blues','Greens','Oranges','Purples'],index=0)
+    if view=='Historical':
+        st.markdown('---'); st.markdown('### 📚 Further Reading')
+        for txt,url in cites: st.markdown(f'* [{txt}]({url})')
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 2 · Data Filtering & Download
+# ──────────────────────────────────────────────────────────────────────────────
+def filter_by(df,col,sel,target):
+    return target if 'All' in sel else target[target['movie_id'].isin(df[df[col].isin(sel)]['movie_id'])]
+
+def filter_movies(year_range,genres_sel,themes_sel,countries_sel,search_query):
+    mv=data['movies'][['movie_id','title','description']].merge(data['releases'][['movie_id','release_year','country_release']],on='movie_id',how='left')
+    mv=mv[mv['release_year'].between(*year_range)]
+    mv=filter_by(data['genres'],'genre',genres_sel,mv)
+    mv=filter_by(data['themes'],'theme',themes_sel,mv)
+    mv=filter_by(data['countries'],'country',countries_sel,mv)
+    if search_query:
+        mask=mv['title'].str.contains(search_query,case=False,na=False)|mv['description'].str.contains(search_query,case=False,na=False)
+        mv=mv[mask]
+    return mv
+
+df=filter_movies(year_range,genres_sel,themes_sel,countries_sel,search_query)
+st.download_button('⬇️ Download Filtered Data',df.to_csv(index=False),'filtered.csv','text/csv')
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 3–6 · Helpers, Views & Main Render (unchanged)
+# ──────────────────────────────────────────────────────────────────────────────
+# … include your _top_terms, render_metrics, render_insights, geo_map, social_scatter, cultural_embed, and final st.title/logic here …
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 2 · Sidebar: Filters & HCI
 # ──────────────────────────────────────────────────────────────────────────────
