@@ -66,13 +66,14 @@ st.markdown(f"<div class='intro-text'>{intro}</div></div>", unsafe_allow_html=Tr
 st.markdown("<div class='section'><h2>Meet Our Team</h2><div class='team-grid'>", unsafe_allow_html=True)
 credits = [
     ("Puspesh Kumar Srivastava","241110405","Female Centric Visualization Dashboard"),
-    ("Sagar Kumar","24111060","UI Design & CSS Styling"),
-    ("Krishanu Ray","24111037","Data Visualization Modules"),
-    ("Uddeshya Raj","24111046","Sentiment Analysis Implementation"),
-    ("Souravdip Das","23110051","Recommendation Engine"),
-    ("Sayak Bera","24111068","Backend & Streamlit Integration"),
-    ("Praveen Patel","24111004","Data Collection & ETL"),
-    ("Srinjoy Sarkar","231110050","Sentiment Analysis Implementation"),
+    ("Sagar Kumar","24111060","Cultural Analysis"),
+    ("Krishanu Ray","24111037","OscarLens: Oscar Awards Analysis"),
+    ("Uddeshya Raj","241110406","Movie Recommender"),
+    ("Suvradip Das","231110051","Genre Analysis"),
+    ("Sayak Bera","241110608","Actor-Director Synergy"),
+    ("Praveen Patel","241110404","Budget and Revenue Analysis"),
+    ("Srinjoy Sarkar","231110050","Review Sentiment Analysis"),
+    ("Sangharsh Nagdevte","231110064","Movie Studio Analysis"),
 ]
 for name, roll, role in credits:
     card = f"""
