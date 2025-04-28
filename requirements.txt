@@ -20,7 +20,6 @@ SPARQLWrapper
 urllib3
 pymongo
 pycountry
-umap
 scipy
 umap-learn
 google-images-search
