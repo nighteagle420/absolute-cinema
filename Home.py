@@ -13,26 +13,33 @@ st.set_page_config(
 # Base directories
 BASE_DIR = Path(__file__).resolve().parent
 
-# Utility: load binary as base64
-def get_base64(path: Path) -> str:
-    """Return base64-encoded string of file contents."""
-    return base64.b64encode(path.read_bytes()).decode()
+# # Utility: load binary as base64
+# def get_base64(path: Path) -> str:
+#     """Return base64-encoded string of file contents."""
+#     return base64.b64encode(path.read_bytes()).decode()
 
-# Load background image
-bg_path = BASE_DIR / 'archive' / 'c.jpeg'
-bg_img = ''
-try:
-    if bg_path.exists():
-        bg_img = get_base64(bg_path)
-except Exception as e:
-    st.warning(f"Background load failed: {e}")
+# # Load background image
+# bg_path = BASE_DIR / 'archive' / 'c.jpeg'
+# bg_img = ''
+# try:
+#     if bg_path.exists():
+#         bg_img = get_base64(bg_path)
+# except Exception as e:
+#     st.warning(f"Background load failed: {e}")
+
+# original .stApp parameters
+# .stApp {{ background: linear-gradient(rgba(0,0,0,0.6),rgba(0,0,0,0.6)), url('data:image/jpeg;base64,{bg_img}') center/cover fixed; }}
+
+image_url = (
+    "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=2670&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+)
 
 # Inject CSS
 css = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap');
 html, body, [class*='css'] {{ font-family: 'Poppins', sans-serif; }}
-.stApp {{ background: linear-gradient(rgba(0,0,0,0.6),rgba(0,0,0,0.6)), url('data:image/jpeg;base64,{bg_img}') center/cover fixed; }}
+.stApp {{ background: linear-gradient(rgba(0,0,0,0.6),rgba(0,0,0,0.6)), url('{image_url}') center/cover fixed; }}
 .navbar {{ position:sticky; top:0; z-index:999; background:rgba(0,0,0,0.8); padding:1rem 2rem; text-align:center; border-bottom:1px solid rgba(255,255,255,0.2); }}
 .navbar h1 {{ color:#00FFFF; font-size:2rem; margin:0; font-weight:800; }}
 .container {{ padding:4rem 2rem; animation:fadeInUp 1s ease-out; }}
