@@ -21,5 +21,5 @@ urllib3
 pymongo
 pycountry
 scipy
-umap-learn
+umap-learn==0.5.7
 umap
