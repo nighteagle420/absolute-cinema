@@ -21,3 +21,4 @@ urllib3
 pymongo
 pycountry
 scipy
+umap-learn
