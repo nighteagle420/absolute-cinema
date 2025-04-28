@@ -22,3 +22,4 @@ pymongo
 pycountry
 scipy
 umap-learn
+umap
