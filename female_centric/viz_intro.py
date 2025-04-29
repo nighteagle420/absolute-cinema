@@ -16,7 +16,7 @@ def render_intro(data):
 **What is a Female-Centric Movie?**  
 A film that puts women’s stories, experiences, and leadership at its core.  
 It centers female protagonists and creative voices, challenging traditional gender norms.  
-These movies deliver richer perspectives and often drive cultural and commercial success.  
+These movies deliver richer perspectives and often drive cultural and commercial success.
 Understanding them reveals insights into representation, audience demand, and industry evolution.
 """, unsafe_allow_html=True)
 
