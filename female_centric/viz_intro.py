@@ -23,7 +23,7 @@ Understanding them reveals insights into representation, audience demand, and in
     # 2. Highlight 4 criteria in 1–2 sentences each
     st.markdown("""
 - **Female Lead**: The top-billed cast member is female, ensuring the story follows a woman’s journey.  
-- **Female Director**: A woman director shapes the narrative through a female creative lens.  
+- **Bechdel Test**: The movie passes the Bechdel Test—featuring at least two named women who talk to each other about something other than a man. 
 - **Majority Female Top-3**: At least two of the first three billed roles are female, emphasizing ensemble representation.  
 - **Community Keywords**: Movie metadata tags or keywords include at least one term from a curated set of women-centric themes (e.g., “female empowerment,” “sisterhood,” “feminist protagonist”).
 """, unsafe_allow_html=True)'''
