@@ -64,7 +64,7 @@ Understanding them reveals insights into representation, audience demand, and in
     <div class="criteria-title">Key Criteria:</div>
     <ul>
     <div class="criteria-item"><b>1. Female Lead</b>: The top-billed cast member is female, ensuring the story follows a woman's journey.</div>
-    <div class="criteria-item"><b>2. Female Director</b>: A woman director shapes the narrative through a female creative lens.</div>
+    <div class="criteria-item"><b>2. Bechdel Test</b>: The movie passes the Bechdel Test—featuring at least two named women who talk to each other about something other than a man.</div>
     <div class="criteria-item"><b>3. Majority Female Top-3</b>: At least two of the first three billed roles are female, emphasizing ensemble representation.</div>
     <div class="criteria-item"><b>4. Community Keywords</b>: Movie metadata tags or keywords include at least one term from a curated set of women-centric themes (e.g., "female empowerment," "sisterhood," "feminist protagonist").</div>
     </ul>
